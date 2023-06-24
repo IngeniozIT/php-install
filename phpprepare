@@ -1,0 +1,51 @@
+#!/bin/bash
+
+error_and_exit(){
+    error_message=$1
+    exit_code=$2
+
+    echo -e "\e[31mERROR\e[0m $error_message"
+    exit $exit_code
+}
+
+exec_or_exit(){
+    description=$1
+    command=$2
+    error_message=$3
+    exit_code=$4
+
+    echo -e "\e[32mSTEP\e[0m $description"
+    eval "$command"
+    if [ $? != 0 ] ; then
+        error_and_exit "$error_message" $exit_code
+    fi
+    echo -e "\e[32mOK\e[0m"
+}
+
+# Update and install required libs
+exec_or_exit "Updating system and installing needed programs" "sudo apt update && sudo apt upgrade -y" "Could not update system" 1
+exec_or_exit "Installing needed libs" "sudo apt install curl zip unzip lsb-release apt-transport-https ca-certificates software-properties-common wget -y" "Could not install libs" 2
+
+## Add PPA if needed
+if [[ ! $(grep -rhE "^[^#].*/php/" /etc/apt/sources.list*) ]]; then
+    distro=$(grep -Po "(?<=^ID=).+" /etc/os-release | sed 's/"//g')
+
+    if [ "$distro" == "ubuntu" ]; then
+        exec_or_exit "Adding PHP Personal Package Archive" "sudo add-apt-repository -y ppa:ondrej/php" "Could not add PHP PPA" 3
+    else
+        exec_or_exit "Adding PHP Personal Package Archive" "sudo wget -O /etc/apt/trusted.gpg.d/php.gpg https://packages.sury.org/php/apt.gpg && sudo sh -c 'echo \"deb https://packages.sury.org/php/ $(lsb_release -sc) main\" > /etc/apt/sources.list.d/php.list'" "Could not add PHP PPA" 3
+    fi
+
+    if [[ ! $(grep -rhE "^[^#].*/php/" /etc/apt/sources.list*) ]]; then
+        error_and_exit "PPA was not installed" 4
+    fi
+    exec_or_exit "Updating apt after adding PPA" "sudo apt update" "Could not update" 5
+fi
+
+## Make phpinstall & phpversion executable
+exec_or_exit "Placing phpinstall in /usr/local/bin/" "sudo cp phpinstall /usr/local/bin/phpinstall && sudo chmod +x /usr/local/bin/phpinstall" "Could not move phpinstall" 6
+exec_or_exit "Placing phpversion in /usr/local/bin/" "sudo cp phpversion /usr/local/bin/phpversion && sudo chmod +x /usr/local/bin/phpversion" "Could not move phpversion" 7
+
+echo -e "\n\e[32mDONE\e[0m Your system is ready for PHP !"
+echo -e "Available versions :" && apt-cache search --names-only "^php[0-9][.][0-9]$" | cut -d ' ' -f 1 | cut -c 4-
+echo -e "\nTo install any PHP version, run \e[36mphpinstall\e[0m"
