@@ -1,0 +1,60 @@
+#!/bin/bash
+
+# Check if PHP is installed
+if [[ ! $(php -v 2> /dev/null) ]]; then
+    echo "ERROR: PHP is not installed, run the phpinstall script"
+    exit 1
+fi
+
+# Current PHP version
+echo "Current PHP version : $(php -v | head -n 1 | cut -d ' ' -f 2 | cut -d - -f 1)"
+
+# Available PHP versions
+phpversions=$(update-alternatives --list php | cut -d p -f 3 | grep [0-9])
+
+if [ -z "$1" ]; then
+    # Target version was not given
+    echo -e "\nAvailable versions :"
+    echo -e "$phpversions\n" | tr " " "\n"
+    read -p "Target version : " version
+    echo ""
+else
+    # Target version was given
+    version="$1"
+    echo "Target version : $version"
+fi
+
+# Validate input
+if ! echo $phpversions | grep -w $version > /dev/null; then
+    echo "ERROR: PHP version '$version' not found"
+    exit 2
+fi
+
+
+# The actual PHP version switch
+if ! sudo update-alternatives --set php /usr/bin/php$version &> /dev/null; then
+    echo -e "ERROR: Could not switch PHP version"
+    exit 3
+fi
+
+## Switch PHP version for other tools (if they exist)
+sudo update-alternatives --set phar /usr/bin/phar$version &> /dev/null
+sudo update-alternatives --set phar.phar /usr/bin/phar.phar$version &> /dev/null
+sudo update-alternatives --set phpize /usr/bin/phpize$version &> /dev/null
+sudo update-alternatives --set php-config /usr/bin/php-config$version &> /dev/null
+
+# Switch apache PHP version (if installed)
+if [[ $( command -v apachectl ) ]]; then
+    # Disable current php apache modules, if any
+    sudo a2dismod "php*" &> /dev/null
+    # Enable new php apache modules
+    if ! sudo a2enmod php$version &> /dev/null; then
+        echo -e "WARNING: Could not enable php$version apache module"
+    # Restart apache (if the server is on)
+    elif [[ $( ps -eo comm | grep apache 2> /dev/null ) ]] && ! sudo service apache2 restart &> /dev/null; then
+        echo -e "WARNING: Could not restart apache"
+    fi
+fi
+
+# Yay !
+echo "Current PHP version : $(php -v | head -n 1 | cut -d ' ' -f 2 | cut -d - -f 1)"
