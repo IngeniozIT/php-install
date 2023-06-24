@@ -1,0 +1,45 @@
+#!/bin/bash
+
+error_and_exit(){
+    error_message=$1
+    exit_code=$2
+
+    echo -e "\e[31mERROR\e[0m $error_message"
+    exit $exit_code
+}
+
+exec_or_exit(){
+    description=$1
+    command=$2
+    error_message=$3
+    exit_code=$4
+
+    echo -e "\e[32mSTEP\e[0m $description"
+    eval "$command"
+    if [ $? != 0 ] ; then
+        error_and_exit "$error_message" $exit_code
+    fi
+    echo -e "\e[32mOK\e[0m"
+}
+
+exec_or_exit "Updating system" "sudo apt update" "Could not update system" 1
+
+# Installable PHP versions
+echo -e "\nInstallable PHP versions :"
+apt-cache search --names-only "^php[0-9][.][0-9]$" | cut -d ' ' -f 1 | cut -c 4-
+echo ""
+
+# Ask which version to install
+read -p "Which one do you want ? " version
+
+# Validate input
+if [[ ! $(apt-cache search --names-only "^php$version$") ]] ; then
+    echo -e "\nERROR: PHP version '$version' not found"
+    exit 2
+fi
+
+# Install
+exec_or_exit "Installing PHP$version" "sudo apt install php$version -y" "Could not install PHP $version" 2
+
+echo -e "\n\e[32mSUCCESS\e[0m PHP $version has been installed"
+echo -e "Run \e[36mphpversion\e[0m to switch your active PHP version"
